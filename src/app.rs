@@ -66,7 +66,8 @@ impl RustyApp {
 
         for (i, p) in self.waveform.points.iter_mut().enumerate() {
             p.x = i as f64;
-            p.y = rng.random_range(-0.01f64..=0.01f64)
+            p.y = rng.random_range(-0.5f64..=0.5f64)
+            + ((i as f64) * 2.0 * PI * rng.random_range(-10.0f64..=self.waveform.sampling_rate as f64)/self.waveform.sampling_rate as f64).sin()
                 + ((i as f64) * 2.0 * PI * self.sine_freq/self.waveform.sampling_rate as f64).sin();
         }
     }
@@ -283,6 +284,7 @@ fn main_frame<R>(
     ui: &mut egui::Ui,
     add_contents: impl FnOnce(&mut egui::Ui) -> R,
 ) -> egui::InnerResponse<R> {
+    puffin::profile_function!("main_frame");
     egui::Frame::new()
         .stroke(egui::Stroke::new(1.0, egui::Color32::DARK_GRAY))
         .inner_margin(5.0)
