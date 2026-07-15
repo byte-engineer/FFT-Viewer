@@ -3,8 +3,9 @@ use eframe::egui::{self, Vec2b};
 use egui_plot::{Line, Plot, PlotPoints, Points};
 use rand::Rng;
 use rustfft::{FftPlanner, num_complex::Complex};
-use std::{f64::consts::PI, process::exit};
+use std::{process::exit};
 use puffin::{profile_function, profile_scope};
+extern crate meval;
 
 
 const RECORD_LENGTH: usize = 10000;
@@ -15,8 +16,9 @@ pub struct RustyApp {
     line_chked: bool,
     enable_fft: bool,
     enable_points: bool,
-    sine_freq: f64,
+    noise: f64,
     auto_bounds: bool,
+    input: Input,
     waveform: WaveForm,
 }
 
@@ -26,6 +28,13 @@ struct WaveForm {
     sampling_rate: usize,
     record_length: usize,
 }
+
+struct Input {
+    text: String,
+    is_valid: bool,
+}
+
+
 
 #[derive(Clone, Copy, Default)]
 struct Point {
@@ -49,27 +58,51 @@ impl RustyApp {
             fft_points: vec![Complex { re: 0.0, im: 0.0 }; RECORD_LENGTH],
             enable_fft: true,
             enable_points: true,
-            sine_freq: 10.0,
-            auto_bounds: false,
+            auto_bounds: true,
+            noise: 0.1,
+            input: Input { 
+                text: "sin(2*pi*x)".to_string(),
+                is_valid: true 
+            },
             waveform: WaveForm { 
-                points: Vec::new(), sampling_rate: 1000, record_length: RECORD_LENGTH
+                points: Vec::new(),
+                sampling_rate: 1000,
+                 record_length: RECORD_LENGTH,
             }
         }
     }
 
     fn update_points(&mut self) {
         profile_function!("Update Points");
-        let mut rng = rand::rng();
 
         self.waveform.points.resize(self.waveform.record_length, Point::default());
         self.fft_points.resize(self.waveform.record_length, Complex::default());
 
-        for (i, p) in self.waveform.points.iter_mut().enumerate() {
-            p.x = i as f64;
-            p.y = rng.random_range(-0.5f64..=0.5f64)
-            + ((i as f64) * 2.0 * PI * rng.random_range(-10.0f64..=self.waveform.sampling_rate as f64)/self.waveform.sampling_rate as f64).sin()
-                + ((i as f64) * 2.0 * PI * self.sine_freq/self.waveform.sampling_rate as f64).sin();
+        let mut rng = rand::rng();
+
+        let expr = self.input.text.parse();
+        if  expr.is_ok() {
+            let expr: meval::Expr = expr.unwrap();
+            let func = expr.bind("x");
+            if func.is_ok() {
+                let func = func.unwrap();
+                self.waveform.points = 
+                    self
+                        .waveform
+                        .points
+                        .iter_mut()
+                        .enumerate()
+                        .map(|(i, _p)| 
+                            Point{x: i as f64,y: self.noise*rng.random_range(-1.0..1.0) + func((i as f64)/self.waveform.sampling_rate as f64)}).collect();
+                    self.input.is_valid = true;
+                    
+            } else {
+                self.input.is_valid = false;
+            }
+        } else {
+            self.input.is_valid = false;
         }
+
     }
 }
 
@@ -119,8 +152,6 @@ impl eframe::App for RustyApp {
             //         });
             // }
 
-
-
             let mut planner = FftPlanner::new();
             let fft = planner.plan_fft_forward(self.fft_points.len());
             self.fft_points = self.waveform.points
@@ -167,16 +198,16 @@ impl eframe::App for RustyApp {
                         //     save_points("data.csv", &self.waveform.points);
                         // }
 
-                        ui.checkbox(&mut self.auto_bounds, "Auto Bounds");
+                        self.auto_bounds = ui.button("Auto Bounds").clicked();
                     });
                 });
 
                 main_frame(ui, |ui| {
                     ui.vertical(|ui| {
                         ui.add(
-                            egui::Slider::new(&mut self.sine_freq, 0.1..=10000.0)
-                                .logarithmic(false)
-                                .text("Frequency"),
+                            egui::Slider::new(&mut self.noise, 0.0001..=1.0)
+                                .logarithmic(true)
+                                .text("Noise"),
                         );
 
                         ui.add(
@@ -205,6 +236,23 @@ impl eframe::App for RustyApp {
                         }
                     })
                 });
+
+
+                egui::Frame::new()
+                    .stroke(egui::Stroke::new(1.0, if self.input.is_valid {egui::Color32::DARK_GRAY} else {egui::Color32::LIGHT_RED}))
+                    .outer_margin(1.0)
+                    .inner_margin(4.0)
+                    .corner_radius(2.0)
+                    .show(ui, |ui|{
+                        
+                        ui.set_min_height(85.0);
+                        ui.add(
+                            egui::TextEdit::multiline(&mut self.input.text)
+                                .desired_rows(5)
+                                .font(egui::TextStyle::Monospace),
+                        );
+                    })
+
             });
 
 
@@ -234,8 +282,10 @@ impl eframe::App for RustyApp {
                         }
                     }
 
-                    if self.auto_bounds {
+                    if self.auto_bounds || self.frame_count == 1 {
                         plot_ui.set_auto_bounds(Vec2b::new(true, true));
+                    } else {
+                        plot_ui.set_auto_bounds(Vec2b::new(false, false));
                     }
 
                     if self.enable_fft {
@@ -289,6 +339,7 @@ fn main_frame<R>(
         .stroke(egui::Stroke::new(1.0, egui::Color32::DARK_GRAY))
         .inner_margin(5.0)
         .outer_margin(1.0)
+        .corner_radius(2.0)
         .show(ui, |ui|{
             ui.set_min_height(85.0);
             add_contents(ui)
