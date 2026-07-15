@@ -57,11 +57,11 @@ impl RustyApp {
             line_chked: true,
             fft_points: vec![Complex { re: 0.0, im: 0.0 }; RECORD_LENGTH],
             enable_fft: true,
-            enable_points: true,
+            enable_points: false,
             auto_bounds: true,
             noise: 0.1,
             input: Input { 
-                text: "sin(2*pi*x)".to_string(),
+                text: "sin(2*pi*100*x)".to_string(),
                 is_valid: true 
             },
             waveform: WaveForm { 
@@ -130,28 +130,6 @@ impl eframe::App for RustyApp {
         
         egui::CentralPanel::default().show(ui, |ui| {
             
-            // let dropped_files = ui.ctx().input(|i| i.raw.dropped_files.clone());
-    
-    
-            // for file in dropped_files {
-            //     if let Some(path) = file.path {
-            //         println!("Dropped: {}", path.display());
-    
-            //         // Load your file here
-            //         // self.load_file(&path);
-            //     }
-            // }
-    
-            // let hovering = ui.ctx().input(|i| !i.raw.hovered_files.is_empty());
-    
-            // if hovering {
-            //     egui::Area::new("drop_overlay".into())
-            //         .fixed_pos(egui::pos2(20.0, 20.0))
-            //         .show(ui.ctx(), |ui| {
-            //             ui.label("Drop files here");
-            //         });
-            // }
-
             let mut planner = FftPlanner::new();
             let fft = planner.plan_fft_forward(self.fft_points.len());
             self.fft_points = self.waveform.points
@@ -246,11 +224,26 @@ impl eframe::App for RustyApp {
                     .show(ui, |ui|{
                         
                         ui.set_min_height(85.0);
-                        ui.add(
+                        let res = ui.add(
                             egui::TextEdit::multiline(&mut self.input.text)
                                 .desired_rows(5)
-                                .font(egui::TextStyle::Monospace),
+                                .font(egui::TextStyle::Monospace)
                         );
+                        res.on_hover_ui(|ui| {
+                            ui.heading("Available functions");
+                            ui.monospace("
+sqrt, abs
+exp, ln
+sin, cos, tan, asin, acos, atan, atan2
+sinh, cosh, tanh, asinh, acosh, atanh
+floor, ceil, round
+signum, max(x, ...), min(x, ...)
+
+constants:
+pi
+e
+                            ");
+                        });
                     })
 
             });

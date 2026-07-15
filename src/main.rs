@@ -9,7 +9,7 @@ fn main() {
     let options = eframe::NativeOptions::default();
 
     let _ = eframe::run_native(
-        "FFT Viewer",
+        "Frequency Domain Viewer",
         options,
         Box::new(|cc| Ok(Box::new(app::RustyApp::new(cc)))),
     );
