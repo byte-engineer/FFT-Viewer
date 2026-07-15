@@ -149,7 +149,7 @@ impl eframe::App for RustyApp {
                 PlotPoints::from_iter(self.waveform.points.iter().map(|p| [p.x, p.y]));
 
             let plot_points_for_fft = PlotPoints::from_iter(
-                self.fft_points[0..self.fft_points.len()/2]
+                self.fft_points[(0..self.fft_points.len()/2)+1]
                     .iter()
                     .enumerate()
                     .map(|(i, p)| [i as f64, (p.norm()/RECORD_LENGTH as f64).log10()]),
