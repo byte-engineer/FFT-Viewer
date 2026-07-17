@@ -16,8 +16,10 @@ pub struct RustyApp {
     line_chked: bool,
     enable_fft: bool,
     enable_points: bool,
-    noise: f64,
     auto_bounds: bool,
+    is_log: bool, 
+    needed_bounds: bool,
+    noise: f64,
     input: Input,
     waveform: WaveForm,
 }
@@ -59,9 +61,11 @@ impl RustyApp {
             enable_fft: true,
             enable_points: false,
             auto_bounds: true,
+            needed_bounds: false,
+            is_log: true,
             noise: 0.1,
             input: Input { 
-                text: "sin(2*pi*100*x)".to_string(),
+                text: "sin(2*pi*100*t)".to_string(),
                 is_valid: true 
             },
             waveform: WaveForm { 
@@ -83,7 +87,7 @@ impl RustyApp {
         let expr = self.input.text.parse();
         if  expr.is_ok() {
             let expr: meval::Expr = expr.unwrap();
-            let func = expr.bind("x");
+            let func = expr.bind("t");
             if func.is_ok() {
                 let func = func.unwrap();
                 self.waveform.points = 
@@ -149,12 +153,25 @@ impl eframe::App for RustyApp {
                 PlotPoints::from_iter(self.waveform.points.iter().map(|p| [p.x, p.y]));
 
             let plot_points_for_fft = PlotPoints::from_iter(
-                self.fft_points[0..(self.fft_points.len()/2)+1]
+                self.fft_points[0..(self.fft_points.len() / 2) + 1]
                     .iter()
                     .enumerate()
-                    .map(|(i, p)| [i as f64, (p.norm()/RECORD_LENGTH as f64).log10()]),
-            );
+                    .skip(1) // skip x = 0 because log10(0) is undefined
+                    .map(|(i, p)| {
+                        let x = i as f64;
+                        let y = if i != 0 {
+                            p.norm() * 2.0 / RECORD_LENGTH as f64
+                        } else {
+                            p.norm() / RECORD_LENGTH as f64
+                        };
 
+                        if self.is_log {
+                            [x, y.log10()]
+                        } else {
+                            [x, y]
+                        }
+                    })
+            );
 
             let scatter = Points::new("Particles", plot_points_for_scatter)
                 .radius(3.0)
@@ -176,7 +193,7 @@ impl eframe::App for RustyApp {
                         //     save_points("data.csv", &self.waveform.points);
                         // }
 
-                        self.auto_bounds = ui.button("Auto Bounds").clicked();
+                        ui.checkbox(&mut self.auto_bounds, "Auto Bounds");
                     });
                 });
 
@@ -206,10 +223,11 @@ impl eframe::App for RustyApp {
                 main_frame(ui, |ui|{  
                     ui.vertical(|ui| {
                         ui.checkbox(&mut self.enable_fft, "Draw FFT.");
+                        ui.checkbox(&mut self.is_log, "log10  in fft.");
                         ui.checkbox(&mut self.enable_points, "Draw points.");
                         if self.enable_points {
                             ui.indent("points settings", |ui| {
-                                ui.checkbox(&mut self.line_chked, "Draw Lines.");
+                                ui.checkbox(&mut self.line_chked, "Draw Lines");
                             });
                         }
                     })
@@ -261,7 +279,7 @@ e
                 })
                 .y_axis_formatter(|mark, _range| {
                     match mark.value {
-                        x => format!("{} db", (x as f64))
+                        x => format!("{:.2} {}", (x as f64), if self.is_log {"db"} else {""})
                     }
                 })
 
@@ -275,15 +293,21 @@ e
                         }
                     }
 
-                    if self.auto_bounds || self.frame_count == 1 {
+                    if self.enable_fft {
+                        plot_ui.line(fft_line);
+                    }
+
+                    if self.auto_bounds || 
+                        self.frame_count == 1 ||
+                        self.needed_bounds 
+                    {
                         plot_ui.set_auto_bounds(Vec2b::new(true, true));
+                        self.needed_bounds = false;
+
                     } else {
                         plot_ui.set_auto_bounds(Vec2b::new(false, false));
                     }
 
-                    if self.enable_fft {
-                        plot_ui.line(fft_line);
-                    }
 
                 }); // plot .show()
         }); // Central panel
