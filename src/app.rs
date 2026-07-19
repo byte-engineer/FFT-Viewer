@@ -1,12 +1,11 @@
 use csv::{Reader, Writer};
 use eframe::egui::{self, Vec2b};
 use egui_plot::{Line, Plot, PlotPoints, Points};
+use puffin::{profile_function, profile_scope};
 use rand::Rng;
 use rustfft::{FftPlanner, num_complex::Complex};
-use std::{process::exit};
-use puffin::{profile_function, profile_scope};
+use std::process::exit;
 extern crate meval;
-
 
 const RECORD_LENGTH: usize = 10000;
 
@@ -17,13 +16,12 @@ pub struct RustyApp {
     enable_fft: bool,
     enable_points: bool,
     auto_bounds: bool,
-    is_log: bool, 
+    is_log: bool,
     needed_bounds: bool,
     noise: f64,
     input: Input,
     waveform: WaveForm,
 }
-
 
 struct WaveForm {
     points: Vec<Point>,
@@ -35,8 +33,6 @@ struct Input {
     text: String,
     is_valid: bool,
 }
-
-
 
 #[derive(Clone, Copy, Default)]
 struct Point {
@@ -64,58 +60,58 @@ impl RustyApp {
             needed_bounds: false,
             is_log: true,
             noise: 0.1,
-            input: Input { 
+            input: Input {
                 text: "sin(2*pi*100*t)".to_string(),
-                is_valid: true 
+                is_valid: true,
             },
-            waveform: WaveForm { 
+            waveform: WaveForm {
                 points: Vec::new(),
                 sampling_rate: 1000,
-                 record_length: RECORD_LENGTH,
-            }
+                record_length: RECORD_LENGTH,
+            },
         }
     }
 
     fn update_points(&mut self) {
         profile_function!("Update Points");
 
-        self.waveform.points.resize(self.waveform.record_length, Point::default());
-        self.fft_points.resize(self.waveform.record_length, Complex::default());
+        self.waveform
+            .points
+            .resize(self.waveform.record_length, Point::default());
+        self.fft_points
+            .resize(self.waveform.record_length, Complex::default());
 
         let mut rng = rand::rng();
 
         let expr = self.input.text.parse();
-        if  expr.is_ok() {
+        if expr.is_ok() {
             let expr: meval::Expr = expr.unwrap();
             let func = expr.bind("t");
             if func.is_ok() {
                 let func = func.unwrap();
-                self.waveform.points = 
-                    self
-                        .waveform
-                        .points
-                        .iter_mut()
-                        .enumerate()
-                        .map(|(i, _p)| 
-                            Point{x: i as f64,y: self.noise*rng.random_range(-1.0..1.0) + func((i as f64)/self.waveform.sampling_rate as f64)}).collect();
-                    self.input.is_valid = true;
-                    
+                self.waveform.points = self
+                    .waveform
+                    .points
+                    .iter_mut()
+                    .enumerate()
+                    .map(|(i, _p)| Point {
+                        x: i as f64,
+                        y: self.noise * rng.random_range(-1.0..1.0)
+                            + func((i as f64) / self.waveform.sampling_rate as f64),
+                    })
+                    .collect();
+                self.input.is_valid = true;
             } else {
                 self.input.is_valid = false;
             }
         } else {
             self.input.is_valid = false;
         }
-
     }
 }
 
-
-
-
 impl eframe::App for RustyApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-
         puffin::GlobalProfiler::lock().new_frame();
         self.frame_count += 1;
 
@@ -123,7 +119,6 @@ impl eframe::App for RustyApp {
         self.update_points();
         let fps = (1.0 / ui.input(|i| i.stable_dt)).round();
 
-        
         ui.input(|i| {
             if i.key_pressed(egui::Key::Escape) {
                 // ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
@@ -131,13 +126,13 @@ impl eframe::App for RustyApp {
             }
         });
 
-        
         egui::CentralPanel::default().show(ui, |ui| {
-            
             let mut planner = FftPlanner::new();
             let fft = planner.plan_fft_forward(self.fft_points.len());
-            self.fft_points = self.waveform.points
-            .iter()
+            self.fft_points = self
+                .waveform
+                .points
+                .iter()
                 .map(|x| Complex { re: x.y, im: 0.0 })
                 .collect();
 
@@ -160,17 +155,13 @@ impl eframe::App for RustyApp {
                     .map(|(i, p)| {
                         let x = i as f64;
                         let y = if i != 0 {
-                            p.norm() * 2.0 / RECORD_LENGTH as f64
+                            p.norm() * 2.0 / self.waveform.record_length as f64
                         } else {
-                            p.norm() / RECORD_LENGTH as f64
+                            p.norm() / self.waveform.record_length as f64
                         };
 
-                        if self.is_log {
-                            [x, y.log10()]
-                        } else {
-                            [x, y]
-                        }
-                    })
+                        if self.is_log { [x, y.log10()] } else { [x, y] }
+                    }),
             );
 
             let scatter = Points::new("Particles", plot_points_for_scatter)
@@ -183,7 +174,6 @@ impl eframe::App for RustyApp {
             let fft_line = Line::new("FFT", plot_points_for_fft);
 
             ui.horizontal(|ui| {
-
                 profile_scope!("Building UI");
                 main_frame(ui, |ui| {
                     ui.vertical(|ui| {
@@ -202,25 +192,23 @@ impl eframe::App for RustyApp {
                         ui.add(
                             egui::Slider::new(&mut self.noise, 0.0001..=1.0)
                                 .logarithmic(true)
-                                .text("Noise"),
+                                .text("Noise Floor"),
                         );
 
                         ui.add(
                             egui::Slider::new(&mut self.waveform.sampling_rate, 2..=10000)
                                 .text("Sampling Rate"),
                         );
-            
+
                         ui.add(
                             egui::Slider::new(&mut self.waveform.record_length, 10..=80000)
                                 .logarithmic(true)
-                                .text("Record length")
+                                .text("Record length"),
                         );
-            
                     });
                 });
-    
-    
-                main_frame(ui, |ui|{  
+
+                main_frame(ui, |ui| {
                     ui.vertical(|ui| {
                         ui.checkbox(&mut self.enable_fft, "Draw FFT.");
                         ui.checkbox(&mut self.is_log, "log10  in fft.");
@@ -233,23 +221,29 @@ impl eframe::App for RustyApp {
                     })
                 });
 
-
                 egui::Frame::new()
-                    .stroke(egui::Stroke::new(1.0, if self.input.is_valid {egui::Color32::DARK_GRAY} else {egui::Color32::LIGHT_RED}))
+                    .stroke(egui::Stroke::new(
+                        1.0,
+                        if self.input.is_valid {
+                            egui::Color32::DARK_GRAY
+                        } else {
+                            egui::Color32::LIGHT_RED
+                        },
+                    ))
                     .outer_margin(1.0)
                     .inner_margin(4.0)
                     .corner_radius(2.0)
-                    .show(ui, |ui|{
-                        
+                    .show(ui, |ui| {
                         ui.set_min_height(85.0);
                         let res = ui.add(
                             egui::TextEdit::multiline(&mut self.input.text)
                                 .desired_rows(5)
-                                .font(egui::TextStyle::Monospace)
+                                .font(egui::TextStyle::Monospace),
                         );
                         res.on_hover_ui(|ui| {
                             ui.heading("Available functions");
-                            ui.monospace("
+                            ui.monospace(
+                                "
 sqrt, abs
 exp, ln
 sin, cos, tan, asin, acos, atan, atan2
@@ -260,29 +254,25 @@ signum, max(x, ...), min(x, ...)
 constants:
 pi
 e
-                            ");
+                            ",
+                            );
                         });
                     })
-
             });
 
-
             Plot::new("Points & fft Plot")
-                .x_axis_formatter(|mark, _range| {
-                    match mark.value {
-                        x if x == 0.0 => "DC".to_owned(),
-                        x => format!(
-                            "{:.1} Hz\n{:.1} sec",
-                            x*(self.waveform.sampling_rate as f64)/(self.waveform.record_length as f64),
-                            x/(self.waveform.sampling_rate as f64)),
-                    }
+                .x_axis_formatter(|mark, _range| match mark.value {
+                    x if x == 0.0 => "DC".to_owned(),
+                    x => format!(
+                        "{:.1} Hz\n{:.1} sec",
+                        x * (self.waveform.sampling_rate as f64)
+                            / (self.waveform.record_length as f64),
+                        x / (self.waveform.sampling_rate as f64)
+                    ),
                 })
-                .y_axis_formatter(|mark, _range| {
-                    match mark.value {
-                        x => format!("{:.2} {}", (x as f64), if self.is_log {"db"} else {""})
-                    }
+                .y_axis_formatter(|mark, _range| match mark.value {
+                    x => format!("{:.2} {}", (x as f64), if self.is_log { "db" } else { "" }),
                 })
-
                 .show(ui, |plot_ui| {
                     puffin::profile_scope!("Plotting");
                     if self.enable_points {
@@ -297,18 +287,12 @@ e
                         plot_ui.line(fft_line);
                     }
 
-                    if self.auto_bounds || 
-                        self.frame_count == 1 ||
-                        self.needed_bounds 
-                    {
+                    if self.auto_bounds || self.frame_count == 1 || self.needed_bounds {
                         plot_ui.set_auto_bounds(Vec2b::new(true, true));
                         self.needed_bounds = false;
-
                     } else {
                         plot_ui.set_auto_bounds(Vec2b::new(false, false));
                     }
-
-
                 }); // plot .show()
         }); // Central panel
 
@@ -345,8 +329,6 @@ fn save_points(path: &str, points: &[Point]) {
     writer.flush().unwrap();
 }
 
-
-
 fn main_frame<R>(
     ui: &mut egui::Ui,
     add_contents: impl FnOnce(&mut egui::Ui) -> R,
@@ -357,7 +339,7 @@ fn main_frame<R>(
         .inner_margin(5.0)
         .outer_margin(1.0)
         .corner_radius(2.0)
-        .show(ui, |ui|{
+        .show(ui, |ui| {
             ui.set_min_height(85.0);
             add_contents(ui)
         })

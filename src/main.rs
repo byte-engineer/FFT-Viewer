@@ -1,10 +1,7 @@
 mod app;
 
-
 fn main() {
-
     start_puffin_server(); // NOTE: you may only want to call this if the users specifies some flag or clicks a button!
-
 
     let options = eframe::NativeOptions::default();
 
@@ -14,8 +11,6 @@ fn main() {
         Box::new(|cc| Ok(Box::new(app::RustyApp::new(cc)))),
     );
 }
-
-
 
 fn start_puffin_server() {
     puffin::set_scopes_on(true); // tell puffin to collect data
